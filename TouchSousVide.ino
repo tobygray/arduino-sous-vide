@@ -55,6 +55,8 @@ const char CURRENT_TEMPERATURE_LABEL[] = "Current temperature:";
 const char TARGET_TEMPERATURE_LABEL[]  = "Target temperature :";
 
 // Pixel layout definitions
+#define SCREEN_WIDTH 240
+#define SCREEN_HEIGHT 320
 #define CHARACTER_PIXEL_WIDTH 6
 #define CHARACTER_PIXEL_HEIGHT 8
 #define CURRENT_TEMPERATURE_X (sizeof(CURRENT_TEMPERATURE_LABEL) * CHARACTER_PIXEL_WIDTH)
@@ -70,9 +72,9 @@ void setup() {
   tft.reset();
   delay(10);
   tft.begin(0x9341);
-  tft.setRotation(3);
-  tft.fillScreen(ILI9341_GREY);
-  tft.setTextColor(ILI9341_WHITE, ILI9341_GREY);
+  tft.setRotation(0);
+  tft.fillScreen(ILI9341_BLACK);
+  tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
   
   // Temperature sensor config
   sensors.begin();
@@ -84,6 +86,20 @@ void setup() {
   // Draw the initial screen
   tft.println(CURRENT_TEMPERATURE_LABEL);
   tft.println(TARGET_TEMPERATURE_LABEL);
+  // Render the + and - change lines
+  for (int i = 1; i < 4; ++i) {
+    tft.drawFastHLine(0, (SCREEN_HEIGHT * i)/ 4, SCREEN_WIDTH, ILI9341_WHITE);
+  }
+  // Render the text for the +/- and 1.0/0.1 regions
+  for (int i = 0; i < 4; ++i) {
+    tft.setCursor(SCREEN_WIDTH - (5 * CHARACTER_PIXEL_WIDTH), ((SCREEN_HEIGHT * (i + 1)) / 4) - CHARACTER_PIXEL_HEIGHT);
+    switch(i) {
+      case 0: tft.print("+ 1.0"); break;
+      case 1: tft.print("+ 0.1"); break;
+      case 2: tft.print("- 0.1"); break;
+      case 3: tft.print("- 1.0"); break;
+    }
+  }
 }
 
 void loop() {
