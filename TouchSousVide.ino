@@ -57,6 +57,8 @@ const char TARGET_TEMPERATURE_LABEL[]  = "Target temperature :";
 // Pixel layout definitions
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 320
+#define BUTTON_WIDTH 80
+#define BUTTON_HEIGHT BUTTON_WIDTH
 #define CHARACTER_PIXEL_WIDTH 6
 #define CHARACTER_PIXEL_HEIGHT 8
 #define CURRENT_TEMPERATURE_X (sizeof(CURRENT_TEMPERATURE_LABEL) * CHARACTER_PIXEL_WIDTH)
@@ -64,8 +66,14 @@ const char TARGET_TEMPERATURE_LABEL[]  = "Target temperature :";
 #define TARGET_TEMPERATURE_X (sizeof(TARGET_TEMPERATURE_LABEL) * CHARACTER_PIXEL_WIDTH)
 #define TARGET_TEMPERATURE_Y (1 * CHARACTER_PIXEL_HEIGHT)
 
-
 double current_temperature, target_temperature;
+
+// Timestamps for the next time to perform an action
+unsigned long next_lcd_update, next_temperature_read;
+
+// Polling periods in milliseconds
+#define LCD_UPDATE_INTERVAL 500
+#define TEMPERATURE_READ_INTERVAL 2500
 
 void setup() {
   // Screen config
@@ -82,17 +90,23 @@ void setup() {
   // Set some initial values
   current_temperature = 20.0;
   target_temperature = 58; // Aim for beef
+  next_lcd_update = 0;
+  next_temperature_read = 0;
   
   // Draw the initial screen
   tft.println(CURRENT_TEMPERATURE_LABEL);
   tft.println(TARGET_TEMPERATURE_LABEL);
-  // Render the + and - change lines
+  // Render the + and - change buttons
+  tft.drawFastVLine(SCREEN_WIDTH - BUTTON_WIDTH, 0, SCREEN_HEIGHT, ILI9341_WHITE);
   for (int i = 1; i < 4; ++i) {
-    tft.drawFastHLine(0, (SCREEN_HEIGHT * i)/ 4, SCREEN_WIDTH, ILI9341_WHITE);
+    tft.drawFastHLine(SCREEN_WIDTH - BUTTON_WIDTH, (SCREEN_HEIGHT * i)/ 4, BUTTON_WIDTH, ILI9341_WHITE);
   }
   // Render the text for the +/- and 1.0/0.1 regions
   for (int i = 0; i < 4; ++i) {
-    tft.setCursor(SCREEN_WIDTH - (5 * CHARACTER_PIXEL_WIDTH), ((SCREEN_HEIGHT * (i + 1)) / 4) - CHARACTER_PIXEL_HEIGHT);
+    // Render in the center of each button
+    const int16_t x = (SCREEN_WIDTH - BUTTON_WIDTH) + (BUTTON_WIDTH / 2) - ((5 * CHARACTER_PIXEL_WIDTH) / 2);
+    const int16_t y = (BUTTON_WIDTH * i) + (BUTTON_WIDTH / 2) - (CHARACTER_PIXEL_HEIGHT / 2);
+    tft.setCursor(x, y);
     switch(i) {
       case 0: tft.print("+ 1.0"); break;
       case 1: tft.print("+ 0.1"); break;
@@ -102,13 +116,26 @@ void setup() {
   }
 }
 
-void loop() {
-  sensors.requestTemperatures(); // Send the command to get temperatures  
-  current_temperature = sensors.getTempCByIndex(0);
+void updateLCD() {
   tft.setCursor(CURRENT_TEMPERATURE_X, CURRENT_TEMPERATURE_Y);
   tft.println(current_temperature);
   tft.setCursor(TARGET_TEMPERATURE_X, TARGET_TEMPERATURE_Y);
   tft.println(target_temperature);
-  
+}
 
+void readTemperature() {
+    sensors.requestTemperatures(); // Send the command to get temperatures  
+    current_temperature = sensors.getTempCByIndex(0);
+}
+
+void loop() {
+  unsigned long now = millis();
+  if (now > next_lcd_update) {
+    updateLCD();
+    next_lcd_update = now + LCD_UPDATE_INTERVAL;
+  }
+  if (now > next_temperature_read) {
+    readTemperature();
+    next_temperature_read = now + TEMPERATURE_READ_INTERVAL;
+  }
 }
