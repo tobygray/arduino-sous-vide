@@ -1,7 +1,18 @@
 #include <Adafruit_GFX_AS8.h>    // Core graphics library
 #include <Adafruit_ILI9341_AS8.h> // Hardware-specific library
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
+// ************ PIN CONFIG ************
+// 433Mhz Transmitter data pin
+#define TRANSMIT_PIN 11
+// Data wire pin
+#define ONE_WIRE_BUS 12
+// Relay trigger pin
+#define TRIGGER_PIN 13
+// ************ END PIN CONFIG ************
 
+// ***** START SCREEN SETUP *****
 // The control pins for the LCD can be assigned to any digital or
 // analog pins...but we'll use the analog pins as this allows us to
 // double up the pins with the touch screen (see the TFT paint example).
@@ -31,17 +42,57 @@ Adafruit_ILI9341_AS8 tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 // Adafruit_ILI9341_AS8 tft;
 
 #define ILI9341_GREY 0x5AEB
+// ***** END SCREEN SETUP *****
+
+// Setup a oneWire instance
+OneWire oneWire(ONE_WIRE_BUS);
+
+// Pass our oneWire reference to Dallas Temperature. 
+DallasTemperature sensors(&oneWire);
+
+
+const char CURRENT_TEMPERATURE_LABEL[] = "Current temperature:";
+const char TARGET_TEMPERATURE_LABEL[]  = "Target temperature :";
+
+// Pixel layout definitions
+#define CHARACTER_PIXEL_WIDTH 6
+#define CHARACTER_PIXEL_HEIGHT 8
+#define CURRENT_TEMPERATURE_X (sizeof(CURRENT_TEMPERATURE_LABEL) * CHARACTER_PIXEL_WIDTH)
+#define CURRENT_TEMPERATURE_Y (0 * CHARACTER_PIXEL_HEIGHT)
+#define TARGET_TEMPERATURE_X (sizeof(TARGET_TEMPERATURE_LABEL) * CHARACTER_PIXEL_WIDTH)
+#define TARGET_TEMPERATURE_Y (1 * CHARACTER_PIXEL_HEIGHT)
+
+
+double current_temperature, target_temperature;
 
 void setup() {
+  // Screen config
   tft.reset();
   delay(10);
   tft.begin(0x9341);
+  tft.setRotation(3);
   tft.fillScreen(ILI9341_GREY);
   tft.setTextColor(ILI9341_WHITE, ILI9341_GREY);
-  tft.println("Hello World");
+  
+  // Temperature sensor config
+  sensors.begin();
+  
+  // Set some initial values
+  current_temperature = 20.0;
+  target_temperature = 58; // Aim for beef
+  
+  // Draw the initial screen
+  tft.println(CURRENT_TEMPERATURE_LABEL);
+  tft.println(TARGET_TEMPERATURE_LABEL);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+  sensors.requestTemperatures(); // Send the command to get temperatures  
+  current_temperature = sensors.getTempCByIndex(0);
+  tft.setCursor(CURRENT_TEMPERATURE_X, CURRENT_TEMPERATURE_Y);
+  tft.println(current_temperature);
+  tft.setCursor(TARGET_TEMPERATURE_X, TARGET_TEMPERATURE_Y);
+  tft.println(target_temperature);
+  
 
 }
