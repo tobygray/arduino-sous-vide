@@ -72,8 +72,8 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress temperature_address;
 
 
-const char CURRENT_TEMPERATURE_LABEL[] = "Current temperature:";
-const char TARGET_TEMPERATURE_LABEL[]  = "Target temperature :";
+#define CURRENT_TEMPERATURE_LABEL "Current temperature:"
+#define TARGET_TEMPERATURE_LABEL "Target temperature :"
 
 // Pixel layout definitions
 #define SCREEN_WIDTH 240
@@ -173,8 +173,8 @@ void setup() {
 
   
   // Draw the initial screen
-  tft.println(CURRENT_TEMPERATURE_LABEL);
-  tft.println(TARGET_TEMPERATURE_LABEL);
+  tft.println(F(CURRENT_TEMPERATURE_LABEL));
+  tft.println(F(TARGET_TEMPERATURE_LABEL));
   // Render the borders for the + and - change buttons and menu selection
   tft.drawFastVLine(SCREEN_WIDTH - BUTTON_WIDTH, 0, SCREEN_HEIGHT, ILI9341_WHITE);
   tft.drawFastVLine(SCREEN_WIDTH - 1, 0, SCREEN_HEIGHT, ILI9341_WHITE);
@@ -220,12 +220,12 @@ void renderMenu() {
 void writeTime(unsigned long minutes) {
   unsigned long hours = minutes / 60;
   if (hours < 10) {
-    tft.print(" ");
+    tft.print(F(" "));
   }
   tft.print(hours);
-  tft.print(":");
+  tft.print(F(":"));
   if ((minutes % 60) < 10) {
-    tft.print("0");
+    tft.print(F("0"));
   }
   tft.print(minutes % 60);
 }
@@ -239,14 +239,14 @@ void renderRecipe() {
     // Render the recipe name
     tft.setCursor(RECIPE_DETAILS_X, RECIPE_DETAILS_Y);
     tft.print(animal->animal);
-    tft.print(", ");
+    tft.print(F(", "));
     tft.println(animalType->type);
-    tft.print(" - ");
+    tft.print(F(" - "));
     tft.println(current_recipe->level);
     writeTime(current_recipe->ideal_minutes);
-    tft.println(" (Best)");
+    tft.println(F(" (Best)"));
     writeTime(current_recipe->last_call_minutes);
-    tft.println(" (Last Call)");
+    tft.println(F(" (Last Call)"));
   }
 }
 
@@ -255,7 +255,7 @@ void renderStopwatch() {
  tft.setCursor(STOPWATCH_X, STOPWATCH_Y);
  unsigned long elapsed = millis() - start_time;
  writeTime(elapsed / 60000);
- tft.println(" (Duration)");
+ tft.println(F(" (Duration)"));
 }
 
 void updateLCD() {
