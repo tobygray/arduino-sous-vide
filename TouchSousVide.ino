@@ -13,6 +13,7 @@
 #define PID_P 70
 #define PID_I 0
 #define PID_D 300
+#define PID_OUTPUT_LIMIT 100
 // ***** END PID PARAMETERS *****
 
 // ************ PIN CONFIG ************
@@ -137,6 +138,11 @@ byte recipe_animal_idx = INVALID_ANIMAL_IDX, recipe_type_idx, recipe_level_idx;
 #define DELAYED_TOUCH_READ_INTERVAL 500
 #define BUZZER_CHECK_INTERVAL 100
 
+
+// Pulse the output every 25ms
+// This should be set such that PID_OUTPUT_LIMIT * POLL_INTERVAL = TEMPERATURE_READ_INTERVAL
+#define POLL_INTERVAL 25000
+
 PID pid(&current_temperature, &output_duty, &target_temperature, PID_P, PID_I, PID_D, DIRECT, TEMPERATURE_READ_INTERVAL);
 
 // Number of degrees over target before warning state is triggered
@@ -162,8 +168,6 @@ void renderButton(int idx, const char* text, bool clear = true) {
   tft.setCursor(x, y);
   tft.print(text);
 }
-
-#define POLL_INTERVAL 25000
 
 void setup() {
   Timer1.initialize(POLL_INTERVAL);
@@ -192,6 +196,9 @@ void setup() {
   menu_type_idx = MENU_NOT_CHOSEN;
   start_time = millis();
 
+  // Configure the PID
+  pid.SetOutputLimits(0, PID_OUTPUT_LIMIT);
+  pid.SetMode(AUTOMATIC);
   
   // Draw the initial screen
   tft.println(F(CURRENT_TEMPERATURE_LABEL));
@@ -301,7 +308,11 @@ void updateLCD() {
     tft.setCursor(TARGET_TEMPERATURE_X, TARGET_TEMPERATURE_Y);
     tft.print(target_temperature);
     tft.setCursor(DUTY_X, DUTY_Y);
-    tft.print(output_duty);
+    if (output_duty < 100) {
+      tft.print(F(" "));
+    }
+    tft.print(int(output_duty));
+    tft.print(F("%"));
     temperature_redraw_needed = false;
   }
   
@@ -319,12 +330,11 @@ void updateLCD() {
   }
 }
 
-#define OUTPUT_LIMIT 100
 int counter = 0;
 void timerInterrupt()
 {
   digitalWrite(TRIGGER_PIN, counter < output_duty);
-  if (++counter >= OUTPUT_LIMIT)
+  if (++counter >= PID_OUTPUT_LIMIT)
     counter = 0;
 }
 
@@ -332,7 +342,7 @@ void transmit()
 {
   // transmit the input temperature as sensor temperature
   // and the output duty as humidity (out of 100)
-  sensor.transmit(current_temperature, output_duty*100/OUTPUT_LIMIT);
+  sensor.transmit(current_temperature, output_duty*100/PID_OUTPUT_LIMIT);
 }
 
 void readTemperature() {
