@@ -91,18 +91,25 @@ double current_temperature, target_temperature;
 double last_current_temperature, last_target_temperature;
 
 // Timestamps for the next time to perform an action
-unsigned long next_lcd_update, next_temperature_read, next_touch_read;
+unsigned long next_lcd_update, next_temperature_read, next_touch_read, next_buzzer_check;
 
 // Polling periods in milliseconds
 #define LCD_UPDATE_INTERVAL 250
 #define TEMPERATURE_READ_INTERVAL 1000
 #define TOUCH_READ_INTERVAL 125
 #define DELAYED_TOUCH_READ_INTERVAL 500
+#define BUZZER_CHECK_INTERVAL 100
+
+// Number of degrees over target before warning state is triggered
+#define OVERHEATING_THRESHOLD 0.5
 
 // Recommendations from ChefSteps:
 //   http://www.chefsteps.com/activities/sous-vide-time-and-temperature-guide
 
 void setup() {
+  // Buzzer config 
+  pinMode(BUZZER_PIN, OUTPUT);
+ 
   // Screen config
   tft.reset();
   delay(10);
@@ -119,9 +126,6 @@ void setup() {
   // Set some initial values
   current_temperature = 20.0;
   target_temperature = 58; // Aim for beef
-  next_lcd_update = 0;
-  next_temperature_read = 0;
-  next_touch_read = 0;
   
   // Draw the initial screen
   tft.println(CURRENT_TEMPERATURE_LABEL);
@@ -169,6 +173,15 @@ void readTemperature() {
   current_temperature = sensors.getTempC(temperature_address);
 }
 
+void buzzerCheck() {
+  // Warn if overheating
+  if (current_temperature > target_temperature + OVERHEATING_THRESHOLD) {
+    digitalWrite(BUZZER_PIN, HIGH);
+    return;
+  }
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
 void readTouch() {
   TSPoint current_touch = ts.getPoint();
   pinMode(XM, OUTPUT);
@@ -204,6 +217,10 @@ void loop() {
   if (now > next_temperature_read) {
     next_temperature_read = now + TEMPERATURE_READ_INTERVAL;
     readTemperature();
+  }
+  if (now > next_buzzer_check) {
+    next_buzzer_check = now + BUZZER_CHECK_INTERVAL;
+    buzzerCheck();
   }
   // Always render last as it can take ages
   if (now > next_lcd_update) {
