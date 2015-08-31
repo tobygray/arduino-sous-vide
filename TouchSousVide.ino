@@ -82,10 +82,14 @@ const char TARGET_TEMPERATURE_LABEL[]  = "Target temperature :";
 #define BUTTON_HEIGHT BUTTON_WIDTH
 #define CHARACTER_PIXEL_WIDTH 6
 #define CHARACTER_PIXEL_HEIGHT 8
+// Status pixel positions
 #define CURRENT_TEMPERATURE_X (sizeof(CURRENT_TEMPERATURE_LABEL) * CHARACTER_PIXEL_WIDTH)
 #define CURRENT_TEMPERATURE_Y (0 * CHARACTER_PIXEL_HEIGHT)
 #define TARGET_TEMPERATURE_X (sizeof(TARGET_TEMPERATURE_LABEL) * CHARACTER_PIXEL_WIDTH)
 #define TARGET_TEMPERATURE_Y (1 * CHARACTER_PIXEL_HEIGHT)
+#define RECIPE_DETAILS_X 0
+#define RECIPE_DETAILS_Y (4 * CHARACTER_PIXEL_HEIGHT)
+#define RECIPE_DETAILS_HEIGHT (4 * CHARACTER_PIXEL_HEIGHT)
 
 // Actual values
 double current_temperature, target_temperature;
@@ -99,6 +103,10 @@ unsigned long next_lcd_update, next_temperature_read, next_touch_read, next_buzz
 int menu_animal_idx, menu_type_idx;
 // Last rendered menu values
 int last_menu_animal_idx, last_menu_type_idx;
+
+const Recipe* current_recipe;
+// Last rendered recipe
+const Recipe* last_current_recipe;
 
 // Polling periods in milliseconds
 #define LCD_UPDATE_INTERVAL 250
@@ -198,6 +206,37 @@ void renderMenu() {
   }
 }
 
+void writeTime(unsigned long minutes) {
+  tft.print(minutes / 60);
+  tft.print(":");
+  if ((minutes % 60) < 10) {
+    tft.print("0");
+  }
+  tft.print(minutes % 60);
+}
+
+void renderRecipe() {
+  // Clear any pre-existing recipe
+  tft.fillRect(RECIPE_DETAILS_X, RECIPE_DETAILS_Y, BUTTON_WIDTH * 2, RECIPE_DETAILS_HEIGHT, ILI9341_BLACK);
+  if (current_recipe) {
+    const Animal* animal = &animals[menu_animal_idx];
+    const AnimalTypes* animalType = &animal->types[menu_type_idx];
+    // Render the recipe name
+    tft.setCursor(RECIPE_DETAILS_X, RECIPE_DETAILS_Y);
+    tft.print(animal->animal);
+    tft.print(", ");
+    tft.println(animalType->type);
+    tft.print(" - ");
+    tft.println(current_recipe->level);
+    tft.print("Best: ");
+    writeTime(current_recipe->ideal_minutes);
+    tft.println();
+    tft.print("Last call: ");
+    writeTime(current_recipe->last_call_minutes);
+    tft.println();
+  }
+}
+
 void updateLCD() {
   if (last_current_temperature != current_temperature) {
     tft.setCursor(CURRENT_TEMPERATURE_X, CURRENT_TEMPERATURE_Y);
@@ -214,6 +253,10 @@ void updateLCD() {
     renderMenu();
     last_menu_animal_idx = menu_animal_idx;
     last_menu_type_idx = menu_type_idx;
+  }
+  if (current_recipe != last_current_recipe) {
+    renderRecipe();
+    last_current_recipe = current_recipe; 
   }
 }
 
@@ -245,6 +288,7 @@ void adjustTarget(double delta) {
 
 void setRecipe(const Recipe* recipe) {
   target_temperature = recipe->temperature;
+  current_recipe = recipe;
 }
 
 void menuPress(int idx) {
