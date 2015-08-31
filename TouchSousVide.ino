@@ -3,8 +3,17 @@
 #include <TouchScreen.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <PID_v1.h>
+#include <thgr810.h>
+#include <TimerOne.h>
 
 #include "recipies.h"
+
+// ***** START PID PARAMETERS *****
+#define PID_P 70
+#define PID_I 0
+#define PID_D 300
+// ***** END PID PARAMETERS *****
 
 // ************ PIN CONFIG ************
 // 433Mhz Transmitter data pin
@@ -64,6 +73,11 @@ Adafruit_ILI9341_AS8 tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300);
 // ***** END TOUCHSCREEN SETUP *****
 
+// ***** START TRANSMIT SETUP *****
+#define TRANSMIT_CHANNEL 1
+#define TRANSMIT_CODE 0x2b
+// ***** END TRANSMIT SETUP *****
+
 // Setup a oneWire instance
 OneWire oneWire(ONE_WIRE_BUS);
 
@@ -71,9 +85,11 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 DeviceAddress temperature_address;
 
+Thgr810 sensor(TRANSMIT_CHANNEL, TRANSMIT_PIN, TRANSMIT_CODE);
 
 #define CURRENT_TEMPERATURE_LABEL "Current temperature:"
-#define TARGET_TEMPERATURE_LABEL "Target temperature :"
+#define TARGET_TEMPERATURE_LABEL  "Target temperature :"
+#define DUTY_LABEL                "               Duty:"
 
 // Pixel layout definitions
 #define SCREEN_WIDTH 240
@@ -87,6 +103,8 @@ DeviceAddress temperature_address;
 #define CURRENT_TEMPERATURE_Y (0 * CHARACTER_PIXEL_HEIGHT)
 #define TARGET_TEMPERATURE_X (sizeof(TARGET_TEMPERATURE_LABEL) * CHARACTER_PIXEL_WIDTH)
 #define TARGET_TEMPERATURE_Y (1 * CHARACTER_PIXEL_HEIGHT)
+#define DUTY_X (sizeof(DUTY_LABEL) * CHARACTER_PIXEL_WIDTH)
+#define DUTY_Y (2 * CHARACTER_PIXEL_HEIGHT)
 #define RECIPE_DETAILS_X 0
 #define RECIPE_DETAILS_Y (4 * CHARACTER_PIXEL_HEIGHT)
 #define RECIPE_DETAILS_HEIGHT (4 * CHARACTER_PIXEL_HEIGHT)
@@ -94,37 +112,36 @@ DeviceAddress temperature_address;
 #define STOPWATCH_Y (8 * CHARACTER_PIXEL_HEIGHT)
 
 // Actual values
-double current_temperature, target_temperature;
-// Last rendered values
-double last_current_temperature, last_target_temperature;
+double current_temperature, target_temperature, output_duty;
 
 // Timestamps for the next time to perform an action
 unsigned long next_lcd_update, next_temperature_read, next_touch_read, next_buzzer_check;
 
 // Timestamp for stopwatch
 unsigned long start_time;
-// Last render time for stopwatch
-unsigned long last_stopwatch_time;
 
 #define MENU_NOT_CHOSEN -1
 int menu_animal_idx, menu_type_idx;
-// Last rendered menu values
-int last_menu_animal_idx, last_menu_type_idx;
+bool menu_redraw_needed = true;
+bool temperature_redraw_needed = true;
+bool recipe_redraw_needed = true;
+bool stopwatch_redraw_needed = true;
 
 const Recipe* current_recipe;
 // Last rendered recipe
 const Recipe* last_current_recipe;
 
 // Polling periods in milliseconds
-#define LCD_UPDATE_INTERVAL 250
-#define TEMPERATURE_READ_INTERVAL 1000
+#define LCD_UPDATE_INTERVAL 1000
+#define TEMPERATURE_READ_INTERVAL 2500
 #define TOUCH_READ_INTERVAL 125
 #define DELAYED_TOUCH_READ_INTERVAL 500
 #define BUZZER_CHECK_INTERVAL 100
 
+PID pid(&current_temperature, &output_duty, &target_temperature, PID_P, PID_I, PID_D, DIRECT, TEMPERATURE_READ_INTERVAL);
+
 // Number of degrees over target before warning state is triggered
 #define OVERHEATING_THRESHOLD 0.5
-
 
 void renderButton(int idx, const char* text, bool clear = true) {
   // Renders the text for a button to the screen. The buttons are laid out in a grid:
@@ -147,7 +164,11 @@ void renderButton(int idx, const char* text, bool clear = true) {
   tft.print(text);
 }
 
+#define POLL_INTERVAL 25000
+
 void setup() {
+  Timer1.initialize(POLL_INTERVAL);
+
   // Buzzer config 
   pinMode(BUZZER_PIN, OUTPUT);
  
@@ -166,7 +187,8 @@ void setup() {
   
   // Set some initial values
   current_temperature = 20.0;
-  target_temperature = 58; // Aim for beef
+  target_temperature = 58;
+  output_duty = 50;
   menu_animal_idx = MENU_NOT_CHOSEN;
   menu_type_idx = MENU_NOT_CHOSEN;
   start_time = millis();
@@ -175,6 +197,7 @@ void setup() {
   // Draw the initial screen
   tft.println(F(CURRENT_TEMPERATURE_LABEL));
   tft.println(F(TARGET_TEMPERATURE_LABEL));
+  tft.println(F(DUTY_LABEL));
   // Render the borders for the + and - change buttons and menu selection
   tft.drawFastVLine(SCREEN_WIDTH - BUTTON_WIDTH, 0, SCREEN_HEIGHT, ILI9341_WHITE);
   tft.drawFastVLine(SCREEN_WIDTH - 1, 0, SCREEN_HEIGHT, ILI9341_WHITE);
@@ -193,6 +216,8 @@ void setup() {
   
   // Render the timer restart button
   renderButton(9, "Restart");
+
+  Timer1.attachInterrupt(timerInterrupt);
 }
 
 void renderMenu() {
@@ -259,35 +284,52 @@ void renderStopwatch() {
 }
 
 void updateLCD() {
-  if (last_current_temperature != current_temperature) {
+  if (temperature_redraw_needed) {
     tft.setCursor(CURRENT_TEMPERATURE_X, CURRENT_TEMPERATURE_Y);
     tft.print(current_temperature);
-    last_current_temperature = current_temperature;
-  }
-  if (last_target_temperature != target_temperature) {
     tft.setCursor(TARGET_TEMPERATURE_X, TARGET_TEMPERATURE_Y);
     tft.print(target_temperature);
-    last_target_temperature = target_temperature;
+    tft.setCursor(DUTY_X, DUTY_Y);
+    tft.print(output_duty);
+    temperature_redraw_needed = false;
   }
-  if ((menu_animal_idx != last_menu_animal_idx) ||
-      (menu_type_idx != last_menu_type_idx)) {
+  
+  if (menu_redraw_needed) {
     renderMenu();
-    last_menu_animal_idx = menu_animal_idx;
-    last_menu_type_idx = menu_type_idx;
+    menu_redraw_needed = false;
   }
-  if (current_recipe != last_current_recipe) {
+  if (recipe_redraw_needed) {
     renderRecipe();
-    last_current_recipe = current_recipe; 
+    recipe_redraw_needed = false;
   }
-  if (last_stopwatch_time + 60000 < millis()) {
+  if (stopwatch_redraw_needed) {
     renderStopwatch();
-    last_stopwatch_time = millis();
+    stopwatch_redraw_needed = false;
   }
+}
+
+#define OUTPUT_LIMIT 100
+int counter = 0;
+void timerInterrupt()
+{
+  digitalWrite(TRIGGER_PIN, counter < output_duty);
+  if (++counter >= OUTPUT_LIMIT)
+    counter = 0;
+}
+
+void transmit()
+{
+  // transmit the input temperature as sensor temperature
+  // and the output duty as humidity (out of 100)
+  sensor.transmit(current_temperature, output_duty*100/OUTPUT_LIMIT);
 }
 
 void readTemperature() {
   sensors.requestTemperatures(); // Send the command to get temperatures  
   current_temperature = sensors.getTempC(temperature_address);
+  pid.Compute();
+  transmit();
+  temperature_redraw_needed = true;
 }
 
 void buzzerCheck() {
@@ -308,12 +350,14 @@ void adjustTarget(double delta) {
   target_temperature += delta;
   if (delta != 0) {
     screenTouched();
+    temperature_redraw_needed = true;
   }
 }
 
 void setRecipe(const Recipe* recipe) {
   target_temperature = recipe->temperature;
   current_recipe = recipe;
+  recipe_redraw_needed = true;
 }
 
 void menuPress(int idx) {
@@ -351,10 +395,11 @@ void menuPress(int idx) {
       }
     }
     screenTouched();
+    menu_redraw_needed = true;
   } else if (idx == 4) {
     // Restart timer button
     start_time = millis();
-    renderStopwatch();  
+    stopwatch_redraw_needed = true;
   }
 }
 
