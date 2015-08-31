@@ -7,7 +7,7 @@
 #include <thgr810.h>
 #include <TimerOne.h>
 
-#include "recipies.h"
+#include "recipes.h"
 
 // ***** START PID PARAMETERS *****
 #define PID_P 70
@@ -120,16 +120,15 @@ unsigned long next_lcd_update, next_temperature_read, next_touch_read, next_buzz
 // Timestamp for stopwatch
 unsigned long start_time;
 
-#define MENU_NOT_CHOSEN -1
-int menu_animal_idx, menu_type_idx;
+#define MENU_NOT_CHOSEN 0xFF
+byte menu_animal_idx, menu_type_idx;
 bool menu_redraw_needed = true;
 bool temperature_redraw_needed = true;
 bool recipe_redraw_needed = true;
 bool stopwatch_redraw_needed = true;
 
-const Recipe* current_recipe;
-// Last rendered recipe
-const Recipe* last_current_recipe;
+#define INVALID_ANIMAL_IDX 0xFF
+byte recipe_animal_idx = INVALID_ANIMAL_IDX, recipe_type_idx, recipe_level_idx;
 
 // Polling periods in milliseconds
 #define LCD_UPDATE_INTERVAL 1000
@@ -221,23 +220,31 @@ void setup() {
 }
 
 void renderMenu() {
+  char buffer[RECIPE_NAME_MAX];
   if (menu_animal_idx == MENU_NOT_CHOSEN) {
-    renderButton(3, animals[0].animal);
-    renderButton(4, animals[1].animal);
-    renderButton(6, animals[2].animal);
-    renderButton(7, animals[3].animal);
+    recipes_get_animal_name(0, buffer);
+    renderButton(3, buffer);
+    recipes_get_animal_name(1, buffer);
+    renderButton(4, buffer);
+    recipes_get_animal_name(2, buffer);
+    renderButton(6, buffer);
+    recipes_get_animal_name(3, buffer);
+    renderButton(7, buffer);
   } else if (menu_type_idx == MENU_NOT_CHOSEN) {
-    const Animal* animal = &animals[menu_animal_idx];
-    renderButton(3, animal->types[0].type);
-    renderButton(4, animal->types[1].type);
-    renderButton(6, animal->types[2].type);
+    recipes_get_type_name(menu_animal_idx, 0, buffer);
+    renderButton(3, buffer);
+    recipes_get_type_name(menu_animal_idx, 1, buffer);
+    renderButton(4, buffer);
+    recipes_get_type_name(menu_animal_idx, 2, buffer);
+    renderButton(6, buffer);
     renderButton(7, "<Back>");
   } else {
-    const Animal* animal = &animals[menu_animal_idx];
-    const AnimalTypes* animalType = &animal->types[menu_type_idx];
-    renderButton(3, animalType->recipies[0].level);
-    renderButton(4, animalType->recipies[1].level);
-    renderButton(6, animalType->recipies[2].level);
+    recipes_get_level_name(menu_animal_idx, menu_type_idx, 0, buffer);
+    renderButton(3, buffer);
+    recipes_get_level_name(menu_animal_idx, menu_type_idx, 1, buffer);
+    renderButton(4, buffer);
+    recipes_get_level_name(menu_animal_idx, menu_type_idx, 2, buffer);
+    renderButton(6, buffer);
     renderButton(7, "<Back>");
   }
 }
@@ -258,19 +265,21 @@ void writeTime(unsigned long minutes) {
 void renderRecipe() {
   // Clear any pre-existing recipe
   tft.fillRect(RECIPE_DETAILS_X, RECIPE_DETAILS_Y, BUTTON_WIDTH * 2, RECIPE_DETAILS_HEIGHT, ILI9341_BLACK);
-  if (current_recipe) {
-    const Animal* animal = &animals[menu_animal_idx];
-    const AnimalTypes* animalType = &animal->types[menu_type_idx];
+  if (recipe_animal_idx != INVALID_ANIMAL_IDX) {
+    char buffer[RECIPE_NAME_MAX];
     // Render the recipe name
     tft.setCursor(RECIPE_DETAILS_X, RECIPE_DETAILS_Y);
-    tft.print(animal->animal);
+    recipes_get_animal_name(recipe_animal_idx, buffer);
+    tft.print(buffer);
     tft.print(F(", "));
-    tft.println(animalType->type);
-    tft.print(F(" - "));
-    tft.println(current_recipe->level);
-    writeTime(current_recipe->ideal_minutes);
+    recipes_get_type_name(recipe_animal_idx, recipe_type_idx, buffer);
+    tft.println(buffer);
+    tft.print(F(" * "));
+    recipes_get_level_name(recipe_animal_idx, recipe_type_idx, recipe_level_idx, buffer);
+    tft.println(buffer);
+    writeTime(recipes_get_ideal_minutes(recipe_animal_idx, recipe_type_idx, recipe_level_idx));
     tft.println(F(" (Best)"));
-    writeTime(current_recipe->last_call_minutes);
+    writeTime(recipes_get_last_call_minutes(recipe_animal_idx, recipe_type_idx, recipe_level_idx));
     tft.println(F(" (Last Call)"));
   }
 }
@@ -354,13 +363,15 @@ void adjustTarget(double delta) {
   }
 }
 
-void setRecipe(const Recipe* recipe) {
-  target_temperature = recipe->temperature;
-  current_recipe = recipe;
+void setRecipe(byte animal_idx, byte type_idx, byte level_idx) {
+  target_temperature = recipes_get_temperature(animal_idx, type_idx, level_idx);
+  recipe_animal_idx = animal_idx;
+  recipe_type_idx = type_idx;
+  recipe_level_idx = level_idx;
   recipe_redraw_needed = true;
 }
 
-void menuPress(int idx) {
+void menuPress(byte idx) {
   // The menu button layout is as follows
   //        +1.0
   //  0  1  +0.1
@@ -375,7 +386,7 @@ void menuPress(int idx) {
         // Back button
         menu_animal_idx = MENU_NOT_CHOSEN;
       } else {
-        if (animals[menu_animal_idx].types[idx].type[0] != 0) {
+        if (recipes_is_valid(menu_animal_idx, idx, 0)) {
           // Only set non-empty entries
           menu_type_idx = idx;
         }
@@ -385,12 +396,9 @@ void menuPress(int idx) {
         // Back button
         menu_type_idx = MENU_NOT_CHOSEN;
       } else {
-        const Animal* animal = &animals[menu_animal_idx];
-        const AnimalTypes* animalType = &animal->types[menu_type_idx];
-        const Recipe* recipe = &animalType->recipies[idx];
-        if (recipe->level[0] != 0) {
+        if (recipes_is_valid(menu_animal_idx, menu_type_idx, idx)) {
           // Only set non-empty entries
-          setRecipe(recipe);
+          setRecipe(menu_animal_idx, menu_type_idx, idx);
         }
       }
     }
