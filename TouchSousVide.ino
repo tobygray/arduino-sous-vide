@@ -1,5 +1,6 @@
 #include <Adafruit_GFX_AS8.h>    // Core graphics library
 #include <Adafruit_ILI9341_AS8.h> // Hardware-specific library
+#include <TouchScreen.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
@@ -44,11 +45,27 @@ Adafruit_ILI9341_AS8 tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 #define ILI9341_GREY 0x5AEB
 // ***** END SCREEN SETUP *****
 
+// ***** START TOUCHSCREEN SETUP *****
+#define TS_MINX 150
+#define TS_MINY 120
+#define TS_MAXX 920
+#define TS_MAXY 940
+#define YP A2 
+#define XM A1 
+#define YM 6 
+#define XP 7 
+// For better pressure precision, we need to know the resistance
+// between X+ and X- Use any multimeter to read it
+// For the one we're using, its 300 ohms across the X plate
+TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300);
+// ***** END TOUCHSCREEN SETUP *****
+
 // Setup a oneWire instance
 OneWire oneWire(ONE_WIRE_BUS);
 
 // Pass our oneWire reference to Dallas Temperature. 
 DallasTemperature sensors(&oneWire);
+DeviceAddress temperature_address;
 
 
 const char CURRENT_TEMPERATURE_LABEL[] = "Current temperature:";
@@ -66,32 +83,40 @@ const char TARGET_TEMPERATURE_LABEL[]  = "Target temperature :";
 #define TARGET_TEMPERATURE_X (sizeof(TARGET_TEMPERATURE_LABEL) * CHARACTER_PIXEL_WIDTH)
 #define TARGET_TEMPERATURE_Y (1 * CHARACTER_PIXEL_HEIGHT)
 
+// Actual values
 double current_temperature, target_temperature;
+// Last rendered values
+double last_current_temperature, last_target_temperature;
 
 // Timestamps for the next time to perform an action
-unsigned long next_lcd_update, next_temperature_read;
+unsigned long next_lcd_update, next_temperature_read, next_touch_read;
 
 // Polling periods in milliseconds
-#define LCD_UPDATE_INTERVAL 500
-#define TEMPERATURE_READ_INTERVAL 2500
+#define LCD_UPDATE_INTERVAL 250
+#define TEMPERATURE_READ_INTERVAL 1000
+#define TOUCH_READ_INTERVAL 125
+#define DELAYED_TOUCH_READ_INTERVAL 500
 
 void setup() {
   // Screen config
   tft.reset();
   delay(10);
   tft.begin(0x9341);
-  tft.setRotation(0);
   tft.fillScreen(ILI9341_BLACK);
   tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
   
   // Temperature sensor config
   sensors.begin();
+  sensors.setWaitForConversion(false);
+  sensors.setResolution(TEMP_9_BIT);
+  sensors.getAddress(temperature_address, 0);
   
   // Set some initial values
   current_temperature = 20.0;
   target_temperature = 58; // Aim for beef
   next_lcd_update = 0;
   next_temperature_read = 0;
+  next_touch_read = 0;
   
   // Draw the initial screen
   tft.println(CURRENT_TEMPERATURE_LABEL);
@@ -117,25 +142,62 @@ void setup() {
 }
 
 void updateLCD() {
-  tft.setCursor(CURRENT_TEMPERATURE_X, CURRENT_TEMPERATURE_Y);
-  tft.println(current_temperature);
-  tft.setCursor(TARGET_TEMPERATURE_X, TARGET_TEMPERATURE_Y);
-  tft.println(target_temperature);
+  if (last_current_temperature != current_temperature) {
+    tft.setCursor(CURRENT_TEMPERATURE_X, CURRENT_TEMPERATURE_Y);
+    tft.print(current_temperature);
+    last_current_temperature = current_temperature;
+  }
+  if (last_target_temperature != target_temperature) {
+    tft.setCursor(TARGET_TEMPERATURE_X, TARGET_TEMPERATURE_Y);
+    tft.print(target_temperature);
+    last_target_temperature = target_temperature;
+  }
 }
 
 void readTemperature() {
-    sensors.requestTemperatures(); // Send the command to get temperatures  
-    current_temperature = sensors.getTempCByIndex(0);
+  sensors.requestTemperatures(); // Send the command to get temperatures  
+  current_temperature = sensors.getTempC(temperature_address);
+}
+
+void readTouch() {
+  TSPoint current_touch = ts.getPoint();
+  pinMode(XM, OUTPUT);
+  pinMode(YP, OUTPUT);
+  // scale from 0->1023 to tft.width
+  current_touch.x = map(current_touch.x, TS_MINX, TS_MAXX, tft.width(), 0);
+  current_touch.y = map(current_touch.y, TS_MINY, TS_MAXY, tft.height(), 0);
+  if (current_touch.z >= ts.pressureThreshhold) {
+    // Check for temperature adjustment
+    double target_delta = 0.0;
+    if (current_touch.x >= (SCREEN_WIDTH - BUTTON_WIDTH)) {
+      const int button_idx = current_touch.y / BUTTON_HEIGHT;
+      switch (button_idx) {
+        case 0: target_delta =  1.0; break;
+        case 1: target_delta =  0.1; break;
+        case 2: target_delta = -0.1; break;
+        case 3: target_delta = -1.0; break;
+      }
+    }
+    target_temperature += target_delta;
+    if (target_delta != 0) {
+      next_touch_read = millis() + DELAYED_TOUCH_READ_INTERVAL;
+    }
+  }
 }
 
 void loop() {
   unsigned long now = millis();
-  if (now > next_lcd_update) {
-    updateLCD();
-    next_lcd_update = now + LCD_UPDATE_INTERVAL;
+  if (now > next_touch_read) {
+    next_touch_read = now + TOUCH_READ_INTERVAL;
+    readTouch();
   }
   if (now > next_temperature_read) {
-    readTemperature();
     next_temperature_read = now + TEMPERATURE_READ_INTERVAL;
+    readTemperature();
+  }
+  // Always render last as it can take ages
+  if (now > next_lcd_update) {
+    next_lcd_update = now + LCD_UPDATE_INTERVAL;
+    updateLCD();
   }
 }
