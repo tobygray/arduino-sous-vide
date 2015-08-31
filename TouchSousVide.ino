@@ -90,6 +90,8 @@ const char TARGET_TEMPERATURE_LABEL[]  = "Target temperature :";
 #define RECIPE_DETAILS_X 0
 #define RECIPE_DETAILS_Y (4 * CHARACTER_PIXEL_HEIGHT)
 #define RECIPE_DETAILS_HEIGHT (4 * CHARACTER_PIXEL_HEIGHT)
+#define STOPWATCH_X 0
+#define STOPWATCH_Y (8 * CHARACTER_PIXEL_HEIGHT)
 
 // Actual values
 double current_temperature, target_temperature;
@@ -98,6 +100,11 @@ double last_current_temperature, last_target_temperature;
 
 // Timestamps for the next time to perform an action
 unsigned long next_lcd_update, next_temperature_read, next_touch_read, next_buzzer_check;
+
+// Timestamp for stopwatch
+unsigned long start_time;
+// Last render time for stopwatch
+unsigned long last_stopwatch_time;
 
 #define MENU_NOT_CHOSEN -1
 int menu_animal_idx, menu_type_idx;
@@ -162,6 +169,7 @@ void setup() {
   target_temperature = 58; // Aim for beef
   menu_animal_idx = MENU_NOT_CHOSEN;
   menu_type_idx = MENU_NOT_CHOSEN;
+  start_time = millis();
 
   
   // Draw the initial screen
@@ -182,6 +190,9 @@ void setup() {
   renderButton(5,  "+ 0.1");
   renderButton(8,  "- 0.1");
   renderButton(11, "- 1.0");
+  
+  // Render the timer restart button
+  renderButton(9, "Restart");
 }
 
 void renderMenu() {
@@ -207,7 +218,11 @@ void renderMenu() {
 }
 
 void writeTime(unsigned long minutes) {
-  tft.print(minutes / 60);
+  unsigned long hours = minutes / 60;
+  if (hours < 10) {
+    tft.print(" ");
+  }
+  tft.print(hours);
   tft.print(":");
   if ((minutes % 60) < 10) {
     tft.print("0");
@@ -236,7 +251,11 @@ void renderRecipe() {
 }
 
 void renderStopwatch() {
- // TODO 
+ tft.fillRect(STOPWATCH_X, STOPWATCH_Y, BUTTON_WIDTH * 2, CHARACTER_PIXEL_HEIGHT, ILI9341_BLACK);
+ tft.setCursor(STOPWATCH_X, STOPWATCH_Y);
+ unsigned long elapsed = millis() - start_time;
+ writeTime(elapsed / 60000);
+ tft.println(" (Duration)");
 }
 
 void updateLCD() {
@@ -259,6 +278,10 @@ void updateLCD() {
   if (current_recipe != last_current_recipe) {
     renderRecipe();
     last_current_recipe = current_recipe; 
+  }
+  if (last_stopwatch_time + 60000 < millis()) {
+    renderStopwatch();
+    last_stopwatch_time = millis();
   }
 }
 
@@ -328,6 +351,10 @@ void menuPress(int idx) {
       }
     }
     screenTouched();
+  } else if (idx == 4) {
+    // Restart timer button
+    start_time = millis();
+    renderStopwatch();  
   }
 }
 
