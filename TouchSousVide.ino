@@ -11,6 +11,8 @@
 #define ONE_WIRE_BUS 12
 // Relay trigger pin
 #define TRIGGER_PIN 13
+// Buzzer trigger pin
+#define BUZZER_PIN 10
 // ************ END PIN CONFIG ************
 
 // ***** START SCREEN SETUP *****
@@ -99,91 +101,6 @@ unsigned long next_lcd_update, next_temperature_read, next_touch_read;
 
 // Recommendations from ChefSteps:
 //   http://www.chefsteps.com/activities/sous-vide-time-and-temperature-guide
-struct Dish {
-  char* style;
-  double temperature;
-  unsigned long favourite;
-  unsigned long last_call;
-};
-
-struct Cut {
-  char* cut;
-  Dish dishes[3]; 
-};
-
-struct Animal {
-  char* animal;
-  Cut cuts[3];
-};
-
-const Animal animals[] = 
-{
-  {"Beef", {
-    {"Steak", {
-      {"Rare",        54, 90, 180},
-      {"Medium Rare", 58, 90, 180},
-      {"Well Done",   70, 90, 180}
-    }},
-    {"Roast", {
-      {"Rare",        56, 420, 960},
-      {"Medium Rare", 60, 360, 840},
-      {"Well Done",   70, 300, 660}
-    }},
-    {"Tough Cuts", {
-      {"Rare",        58, 1440, 2880},
-      {"Medium Rare", 65,  960, 1440},
-      {"Well Done",   85,  480,  960}
-    }}}
-  },
-  {"Pork", {
-    {"Chop", {
-      {"Rare",        58, 60, 150},
-      {"Medium Rare", 62, 60, 105},
-      {"Well Done",   70, 60,  90}
-    }},
-    {"Roast", {
-      {"Rare",        58, 180, 330},
-      {"Medium Rare", 62, 180, 240},
-      {"Well Done",   70, 180, 210}
-    }},
-    {"Tough Cuts", {
-      {"Rare",        62, 960, 1440},
-      {"Medium Rare", 68, 720, 1440},
-      {"Well Done",   85, 480,  960}
-    }}}
-  },
-  {"Chicken", {
-    {"Light", {
-      {"Super-Supple", 60, 120, 210},
-      {"Tender",       65,  60, 120},
-      {"Well Done",    75,  60,  90}
-    }},
-    {"Dark", {
-      {"Tender",       65, 90, 270},
-      {"Off the Bone", 75, 90, 180}
-    }}}
-  },
-  {"Other", {
-    {"Fish", {
-      {"Tender",       40, 40, 60},
-      {"Flaky",        50, 40, 60},
-      {"Well done",    60, 40, 60}
-    }},
-    {"Veg.", {
-      {"Green Veg.",   85,  5,  20},
-      {"Winter Squash",85, 60, 180},
-      {"Potato + root",85, 60, 180}
-    }},
-    {"Fruit", {
-      {"Warm & Ripe",  68, 105, 150},
-      {"Soft",         85,  30,  90}
-    }}}
-  },
-  {}
-};
-
-int animal_idx, cut_idx;
-int last_animal_idx, last_cut_idx;
 
 void setup() {
   // Screen config
@@ -205,10 +122,6 @@ void setup() {
   next_lcd_update = 0;
   next_temperature_read = 0;
   next_touch_read = 0;
-  last_animal_idx = 0;
-  animal_idx = -1;
-  last_cut_idx = 0;
-  cut_idx = -1;
   
   // Draw the initial screen
   tft.println(CURRENT_TEMPERATURE_LABEL);
@@ -248,27 +161,6 @@ void updateLCD() {
     tft.setCursor(TARGET_TEMPERATURE_X, TARGET_TEMPERATURE_Y);
     tft.print(target_temperature);
     last_target_temperature = target_temperature;
-  }
-  if (last_animal_idx != animal_idx) {
-    if (animal_idx < 0) {
-      // Need to render text for animal selection
-      int i = 0;
-      while (animals[i].animal != NULL) {
-          const int16_t pixel_width = strlen(animals[i].animal) * CHARACTER_PIXEL_WIDTH;
-          const int16_t x = (BUTTON_WIDTH / 2) - (pixel_width / 2) + (BUTTON_WIDTH * (i % 2));
-          const int16_t y = BUTTON_HEIGHT + (BUTTON_HEIGHT / 2) + (BUTTON_HEIGHT * (i / 2));
-          tft.setCursor(x, y);
-          tft.print(animals[i].animal);
-          ++i;
-      }
-    }
-    last_animal_idx = animal_idx;
-  }
-  if (last_cut_idx != cut_idx) {
-    if (cut_idx < 0) {
-      // Need to render text for cut selection
-    }
-    last_cut_idx = cut_idx;
   }
 }
 
