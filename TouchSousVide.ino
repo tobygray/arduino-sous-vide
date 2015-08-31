@@ -172,6 +172,9 @@ void renderButton(int idx, const char* text, bool clear = true) {
 void setup() {
   Timer1.initialize(POLL_INTERVAL);
 
+  // Relay pin
+  pinMode(TRIGGER_PIN, OUTPUT);
+
   // Buzzer config 
   pinMode(BUZZER_PIN, OUTPUT);
  
