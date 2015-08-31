@@ -164,18 +164,17 @@ const Animal animals[] = {
     }
   },
   {"Other", {
-    {"Steak", {
-      {"Rare",       54, 90, 180},
-      {"Medium Rare", 58, 90, 180},
-      {"Well Done",   70, 90, 180}}},
-    {"Roast", {
-      {"Rare",        56, 420, 960},
-      {"Medium Rare", 60, 360, 840},
-      {"Well Done",   70, 300, 660}}},
-    {"Tough", {
-      {"Rare",         58, 1440, 2880},
-      {"Medium Rare",  65, 960, 1440},
-      {"Well Done",    85, 480, 960}}}
+    {"Fish", {
+      {"Tender",      40, 40, 60},
+      {"Flaky",       58, 40, 60},
+      {"Well Done",   60, 40, 60}}},
+    {"Vegetables", {
+      {"Green Veg.",  85, 5, 20},
+      {"Squash",      85, 60, 180},
+      {"Root Veg.",   85, 60, 180}}},
+    {"Fruit", {
+      {"Warm & Ripe",  68, 105, 150},
+      {"Well Done",    85, 30, 90}}}
     }
   },
 };
