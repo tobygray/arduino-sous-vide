@@ -119,13 +119,13 @@ unsigned long next_lcd_update, next_temperature_read, next_touch_read, next_buzz
 
 // Timestamp for stopwatch
 unsigned long start_time;
+unsigned long next_stopwatch_redraw;
 
 #define MENU_NOT_CHOSEN 0xFF
 byte menu_animal_idx, menu_type_idx;
 bool menu_redraw_needed = true;
 bool temperature_redraw_needed = true;
 bool recipe_redraw_needed = true;
-bool stopwatch_redraw_needed = true;
 
 #define INVALID_ANIMAL_IDX 0xFF
 byte recipe_animal_idx = INVALID_ANIMAL_IDX, recipe_type_idx, recipe_level_idx;
@@ -274,7 +274,7 @@ void renderRecipe() {
     tft.print(F(", "));
     recipes_get_type_name(recipe_animal_idx, recipe_type_idx, buffer);
     tft.println(buffer);
-    tft.print(F(" * "));
+    tft.print(F("   "));
     recipes_get_level_name(recipe_animal_idx, recipe_type_idx, recipe_level_idx, buffer);
     tft.println(buffer);
     writeTime(recipes_get_ideal_minutes(recipe_animal_idx, recipe_type_idx, recipe_level_idx));
@@ -284,12 +284,14 @@ void renderRecipe() {
   }
 }
 
-void renderStopwatch() {
+unsigned long renderStopwatch() {
  tft.fillRect(STOPWATCH_X, STOPWATCH_Y, BUTTON_WIDTH * 2, CHARACTER_PIXEL_HEIGHT, ILI9341_BLACK);
  tft.setCursor(STOPWATCH_X, STOPWATCH_Y);
- unsigned long elapsed = millis() - start_time;
- writeTime(elapsed / 60000);
+ const unsigned long elapsed = millis() - start_time;
+ const unsigned long elapsed_minutes = elapsed / 60000;
+ writeTime(elapsed_minutes);
  tft.println(F(" (Duration)"));
+ return start_time + ((elapsed_minutes + 1) * 60000);
 }
 
 void updateLCD() {
@@ -311,9 +313,9 @@ void updateLCD() {
     renderRecipe();
     recipe_redraw_needed = false;
   }
-  if (stopwatch_redraw_needed) {
-    renderStopwatch();
-    stopwatch_redraw_needed = false;
+  unsigned long now = millis();
+  if (now >= next_stopwatch_redraw) {
+    next_stopwatch_redraw = renderStopwatch();
   }
 }
 
@@ -407,7 +409,7 @@ void menuPress(byte idx) {
   } else if (idx == 4) {
     // Restart timer button
     start_time = millis();
-    stopwatch_redraw_needed = true;
+    next_stopwatch_redraw = start_time;
   }
 }
 
