@@ -105,6 +105,40 @@ unsigned long next_lcd_update, next_temperature_read, next_touch_read, next_buzz
 
 // Recommendations from ChefSteps:
 //   http://www.chefsteps.com/activities/sous-vide-time-and-temperature-guide
+struct Recipe {
+  const char level[12] PROGMEM;
+  const double temperature;
+  const unsigned long ideal_minutes;
+  const unsigned long last_call_minutes;
+};
+
+struct AnimalTypes {
+  const char type[12] PROGMEM;
+  const Recipe recipies[3] PROGMEM;
+};
+
+struct Animal {
+  const char animal[12] PROGMEM;
+  const AnimalTypes types[3] PROGMEM;
+};
+
+const Animal animals[] = {
+  {"Beef", {
+    {"Steak", {
+      {"Rare", 54, 90, 180},
+      {"Medium-R", 58, 90, 180},
+      {"Well-D", 70, 90, 180}}},
+    {"Roast", {
+      {"Rare", 56, 420, 960},
+      {"Medium-R", 60, 360, 840},
+      {"Well-D", 70, 300, 660}}},
+    {"Tough", {
+      {"Rare", 58, 1440, 2880},
+      {"Medium-R", 65, 960, 1440},
+      {"Well-D", 85, 480, 960}}}
+    }
+  },
+};
 
 void setup() {
   // Buzzer config 
