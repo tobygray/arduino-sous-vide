@@ -228,13 +228,15 @@ void renderRecipe() {
     tft.println(animalType->type);
     tft.print(" - ");
     tft.println(current_recipe->level);
-    tft.print("Best: ");
     writeTime(current_recipe->ideal_minutes);
-    tft.println();
-    tft.print("Last call: ");
+    tft.println(" (Best)");
     writeTime(current_recipe->last_call_minutes);
-    tft.println();
+    tft.println(" (Last Call)");
   }
+}
+
+void renderStopwatch() {
+ // TODO 
 }
 
 void updateLCD() {
@@ -306,7 +308,10 @@ void menuPress(int idx) {
         // Back button
         menu_animal_idx = MENU_NOT_CHOSEN;
       } else {
-        menu_type_idx = idx;
+        if (animals[menu_animal_idx].types[idx].type[0] != 0) {
+          // Only set non-empty entries
+          menu_type_idx = idx;
+        }
       }
     } else {
       if (idx == 3) {
@@ -316,7 +321,10 @@ void menuPress(int idx) {
         const Animal* animal = &animals[menu_animal_idx];
         const AnimalTypes* animalType = &animal->types[menu_type_idx];
         const Recipe* recipe = &animalType->recipies[idx];
-        setRecipe(recipe);
+        if (recipe->level[0] != 0) {
+          // Only set non-empty entries
+          setRecipe(recipe);
+        }
       }
     }
     screenTouched();
