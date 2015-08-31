@@ -4,6 +4,8 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
+#include "recipies.h"
+
 // ************ PIN CONFIG ************
 // 433Mhz Transmitter data pin
 #define TRANSMIT_PIN 11
@@ -93,6 +95,11 @@ double last_current_temperature, last_target_temperature;
 // Timestamps for the next time to perform an action
 unsigned long next_lcd_update, next_temperature_read, next_touch_read, next_buzzer_check;
 
+#define MENU_NOT_CHOSEN -1
+int menu_animal_idx, menu_type_idx;
+// Last rendered menu values
+int last_menu_animal_idx, last_menu_type_idx;
+
 // Polling periods in milliseconds
 #define LCD_UPDATE_INTERVAL 250
 #define TEMPERATURE_READ_INTERVAL 1000
@@ -103,81 +110,27 @@ unsigned long next_lcd_update, next_temperature_read, next_touch_read, next_buzz
 // Number of degrees over target before warning state is triggered
 #define OVERHEATING_THRESHOLD 0.5
 
-// Recommendations from ChefSteps:
-//   http://www.chefsteps.com/activities/sous-vide-time-and-temperature-guide
-struct Recipe {
-  const char level[12] PROGMEM;
-  const double temperature;
-  const unsigned long ideal_minutes;
-  const unsigned long last_call_minutes;
-};
 
-struct AnimalTypes {
-  const char type[12] PROGMEM;
-  const Recipe recipies[3] PROGMEM;
-};
-
-struct Animal {
-  const char animal[12] PROGMEM;
-  const AnimalTypes types[3] PROGMEM;
-};
-
-const Animal animals[] = {
-  {"Beef", {
-    {"Steak", {
-      {"Rare",        54, 90, 180},
-      {"Medium Rare", 58, 90, 180},
-      {"Well Done",   70, 90, 180}}},
-    {"Roast", {
-      {"Rare",        56, 420, 960},
-      {"Medium Rare", 60, 360, 840},
-      {"Well Done",   70, 300, 660}}},
-    {"Tough", {
-      {"Rare",        58, 1440, 2880},
-      {"Medium Rare", 65, 960, 1440},
-      {"Well Done",   85, 480, 960}}}
-    }
-  },
-  {"Pork", {
-    {"Chop", {
-      {"Rare",        58, 60, 150},
-      {"Medium Rare", 62, 60, 105},
-      {"Well Done",   70, 60,  90}}},
-    {"Roast", {
-      {"Rare",        58, 180, 330},
-      {"Medium Rare", 62, 180, 240},
-      {"Well Done",   70, 180, 210}}},
-    {"Tough", {
-      {"Rare",        62, 960, 1440},
-      {"Medium Rare", 65, 720, 1440},
-      {"Well Done",   85, 480, 960}}}
-    }
-  },
-  {"Chicken", {
-    {"Light Meat", {
-      {"S.-Supple",   60, 120, 210},
-      {"Juicy",       65, 60, 120},
-      {"Well Done",   75, 60, 90}}},
-    {"Dark Meat", {
-      {"Tender",      65, 90, 270},
-      {"Off bone",    75, 90, 180}}}
-    }
-  },
-  {"Other", {
-    {"Fish", {
-      {"Tender",      40, 40, 60},
-      {"Flaky",       58, 40, 60},
-      {"Well Done",   60, 40, 60}}},
-    {"Vegetables", {
-      {"Green Veg.",  85, 5, 20},
-      {"Squash",      85, 60, 180},
-      {"Root Veg.",   85, 60, 180}}},
-    {"Fruit", {
-      {"Warm & Ripe",  68, 105, 150},
-      {"Well Done",    85, 30, 90}}}
-    }
-  },
-};
+void renderButton(int idx, const char* text, bool clear = true) {
+  // Renders the text for a button to the screen. The buttons are laid out in a grid:
+  //
+  //  0  1  2
+  //  3  4  5
+  //  6  7  8
+  //  9 10 11
+  const int16_t x_col = idx % 3;
+  const int16_t y_row = idx / 3;
+  const int16_t x = (BUTTON_WIDTH * x_col) + (BUTTON_WIDTH / 2) - ((strlen(text) * CHARACTER_PIXEL_WIDTH) / 2);
+  const int16_t y = (BUTTON_HEIGHT * y_row) + (BUTTON_HEIGHT / 2) - (CHARACTER_PIXEL_HEIGHT / 2);
+  if (clear) {
+    // + 1 to not paint over the border line
+    const int16_t start_x = (BUTTON_WIDTH * x_col) + 1;
+    // -2 on width to avoid the border line
+    tft.fillRect(start_x, y, BUTTON_WIDTH - 2, CHARACTER_PIXEL_HEIGHT, ILI9341_BLACK);
+  }
+  tft.setCursor(x, y);
+  tft.print(text);
+}
 
 void setup() {
   // Buzzer config 
@@ -199,6 +152,9 @@ void setup() {
   // Set some initial values
   current_temperature = 20.0;
   target_temperature = 58; // Aim for beef
+  menu_animal_idx = MENU_NOT_CHOSEN;
+  menu_type_idx = MENU_NOT_CHOSEN;
+
   
   // Draw the initial screen
   tft.println(CURRENT_TEMPERATURE_LABEL);
@@ -214,17 +170,31 @@ void setup() {
     tft.drawFastHLine(0, (SCREEN_HEIGHT * i)/ 4, SCREEN_WIDTH, ILI9341_WHITE);
   }
   // Render the text for the +/- and 1.0/0.1 regions
-  for (int i = 0; i < 4; ++i) {
-    // Render in the center of each button
-    const int16_t x = (SCREEN_WIDTH - BUTTON_WIDTH) + (BUTTON_WIDTH / 2) - ((5 * CHARACTER_PIXEL_WIDTH) / 2);
-    const int16_t y = (BUTTON_WIDTH * i) + (BUTTON_WIDTH / 2) - (CHARACTER_PIXEL_HEIGHT / 2);
-    tft.setCursor(x, y);
-    switch(i) {
-      case 0: tft.print("+ 1.0"); break;
-      case 1: tft.print("+ 0.1"); break;
-      case 2: tft.print("- 0.1"); break;
-      case 3: tft.print("- 1.0"); break;
-    }
+  renderButton(2,  "+ 1.0");
+  renderButton(5,  "+ 0.1");
+  renderButton(8,  "- 0.1");
+  renderButton(11, "- 1.0");
+}
+
+void renderMenu() {
+  if (menu_animal_idx == MENU_NOT_CHOSEN) {
+    renderButton(3, animals[0].animal);
+    renderButton(4, animals[1].animal);
+    renderButton(6, animals[2].animal);
+    renderButton(7, animals[3].animal);
+  } else if (menu_type_idx == MENU_NOT_CHOSEN) {
+    const Animal* animal = &animals[menu_animal_idx];
+    renderButton(3, animal->types[0].type);
+    renderButton(4, animal->types[1].type);
+    renderButton(6, animal->types[2].type);
+    renderButton(7, "<Back>");
+  } else {
+    const Animal* animal = &animals[menu_animal_idx];
+    const AnimalTypes* animalType = &animal->types[menu_type_idx];
+    renderButton(3, animalType->recipies[0].level);
+    renderButton(4, animalType->recipies[1].level);
+    renderButton(6, animalType->recipies[2].level);
+    renderButton(7, "<Back>");
   }
 }
 
@@ -238,6 +208,12 @@ void updateLCD() {
     tft.setCursor(TARGET_TEMPERATURE_X, TARGET_TEMPERATURE_Y);
     tft.print(target_temperature);
     last_target_temperature = target_temperature;
+  }
+  if ((menu_animal_idx != last_menu_animal_idx) ||
+      (menu_type_idx != last_menu_type_idx)) {
+    renderMenu();
+    last_menu_animal_idx = menu_animal_idx;
+    last_menu_type_idx = menu_type_idx;
   }
 }
 
@@ -255,6 +231,54 @@ void buzzerCheck() {
   digitalWrite(BUZZER_PIN, LOW);
 }
 
+void screenTouched() {
+  // Delay the next scan so that double clicks don't happen.
+  next_touch_read = millis() + DELAYED_TOUCH_READ_INTERVAL;
+}
+
+void adjustTarget(double delta) {
+  target_temperature += delta;
+  if (delta != 0) {
+    screenTouched();
+  }
+}
+
+void setRecipe(const Recipe* recipe) {
+  target_temperature = recipe->temperature;
+}
+
+void menuPress(int idx) {
+  // The menu button layout is as follows
+  //        +1.0
+  //  0  1  +0.1
+  //  2  3  -0.1
+  //  4  5  +1.0
+  if (idx < 4) {
+    // A selection on the food type menu
+    if (menu_animal_idx == MENU_NOT_CHOSEN) {
+      menu_animal_idx = idx;
+    } else if (menu_type_idx == MENU_NOT_CHOSEN) {
+      if (idx == 3) {
+        // Back button
+        menu_animal_idx = MENU_NOT_CHOSEN;
+      } else {
+        menu_type_idx = idx;
+      }
+    } else {
+      if (idx == 3) {
+        // Back button
+        menu_type_idx = MENU_NOT_CHOSEN;
+      } else {
+        const Animal* animal = &animals[menu_animal_idx];
+        const AnimalTypes* animalType = &animal->types[menu_type_idx];
+        const Recipe* recipe = &animalType->recipies[idx];
+        setRecipe(recipe);
+      }
+    }
+    screenTouched();
+  }
+}
+
 void readTouch() {
   TSPoint current_touch = ts.getPoint();
   pinMode(XM, OUTPUT);
@@ -263,20 +287,24 @@ void readTouch() {
   current_touch.x = map(current_touch.x, TS_MINX, TS_MAXX, tft.width(), 0);
   current_touch.y = map(current_touch.y, TS_MINY, TS_MAXY, tft.height(), 0);
   if (current_touch.z >= ts.pressureThreshhold) {
-    // Check for temperature adjustment
-    double target_delta = 0.0;
-    if (current_touch.x >= (SCREEN_WIDTH - BUTTON_WIDTH)) {
-      const int button_idx = current_touch.y / BUTTON_HEIGHT;
-      switch (button_idx) {
-        case 0: target_delta =  1.0; break;
-        case 1: target_delta =  0.1; break;
-        case 2: target_delta = -0.1; break;
-        case 3: target_delta = -1.0; break;
-      }
-    }
-    target_temperature += target_delta;
-    if (target_delta != 0) {
-      next_touch_read = millis() + DELAYED_TOUCH_READ_INTERVAL;
+    // Work out the button idx
+    const int x_col = current_touch.x / BUTTON_WIDTH;
+    const int y_row = current_touch.y / BUTTON_HEIGHT;
+    const int button_idx = x_col + (3 * y_row);
+    // Handle the button
+    switch(button_idx) {
+      // Temperature buttons
+      case 2:  adjustTarget( 1.0); break;
+      case 5:  adjustTarget( 0.1); break;
+      case 8:  adjustTarget(-0.1); break;
+      case 11: adjustTarget(-1.0); break;
+      // Menu buttons
+      case 3:   menuPress(0); break;
+      case 4:   menuPress(1); break;
+      case 6:   menuPress(2); break;
+      case 7:   menuPress(3); break;
+      case 9:   menuPress(4); break;
+      case 10:  menuPress(5); break;
     }
   }
 }
