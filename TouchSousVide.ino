@@ -11,7 +11,7 @@
 
 // ***** START PID PARAMETERS *****
 #define PID_P 70
-#define PID_I 0
+#define PID_I 0.01
 #define PID_D 300
 #define PID_OUTPUT_LIMIT 100
 // ***** END PID PARAMETERS *****
@@ -91,6 +91,8 @@ Thgr810 sensor(TRANSMIT_CHANNEL, TRANSMIT_PIN, TRANSMIT_CODE);
 #define CURRENT_TEMPERATURE_LABEL "Current temperature:"
 #define TARGET_TEMPERATURE_LABEL  "Target temperature :"
 #define DUTY_LABEL                "               Duty:"
+
+
 
 // Pixel layout definitions
 #define SCREEN_WIDTH 240
@@ -316,6 +318,14 @@ void updateLCD() {
     }
     tft.print(int(output_duty));
     tft.print(F("%"));
+    tft.setCursor(0, DUTY_Y + CHARACTER_PIXEL_HEIGHT);
+    tft.print(F("P: "));
+    tft.print(pid.GetKp());
+    tft.print(F("I: "));
+    tft.print(pid.GetKi());
+    tft.print(F("D: "));
+    tft.print(pid.GetKd());
+    tft.print(F(" "));
     temperature_redraw_needed = false;
   }
   
@@ -359,7 +369,7 @@ void readTemperature() {
 void buzzerCheck() {
   // Warn if overheating
   if (current_temperature > target_temperature + OVERHEATING_THRESHOLD) {
-    digitalWrite(BUZZER_PIN, HIGH);
+    //digitalWrite(BUZZER_PIN, HIGH);
     return;
   }
   digitalWrite(BUZZER_PIN, LOW);

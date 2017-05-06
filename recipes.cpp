@@ -59,8 +59,13 @@ const PROGMEM Animal animals[] = {
       {"Well Done",   75, 60, 90}}},
     {"Dark Meat", {
       {"Tender",      65, 90, 270},
-      {"Off bone",    75, 90, 180}}}
-    }
+      {"Off bone",    75, 90, 180},
+      {"", 0 ,0, 0}}},
+    {"", {
+      {"", 0 ,0, 0},
+      {"", 0 ,0, 0},
+      {"", 0 ,0, 0}}}
+    },
   },
   {"Other", {
     {"Fish", {
@@ -73,7 +78,8 @@ const PROGMEM Animal animals[] = {
       {"Root Veg.",   85, 60, 180}}},
     {"Fruit", {
       {"Warm & Ripe",  68, 105, 150},
-      {"Well Done",    85, 30, 90}}}
+      {"Well Done",    85, 30, 90},
+      {"", 0 ,0, 0}}}
     }
   },
 };

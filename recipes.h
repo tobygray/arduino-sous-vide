@@ -1,6 +1,12 @@
 #ifndef RECIPIES_H
 #define RECIPIES_H
-#include <arduino.h>
+
+#if ARDUINO >= 100
+ #include "Arduino.h"
+ #include "Print.h"
+#else
+ #include "WProgram.h"
+#endif
 
 #define RECIPE_NAME_MAX 12
 void recipes_get_animal_name(byte animal_idx, char* buffer);
