@@ -133,6 +133,8 @@ bool recipe_redraw_needed = true;
 #define INVALID_ANIMAL_IDX 0xFF
 byte recipe_animal_idx = INVALID_ANIMAL_IDX, recipe_type_idx, recipe_level_idx;
 
+byte locked;
+
 // Polling periods in milliseconds
 #define LCD_UPDATE_INTERVAL 1000
 #define TEMPERATURE_READ_INTERVAL 2500
@@ -227,13 +229,21 @@ void setup() {
   
   // Render the timer restart button
   renderButton(9, "Restart");
+  
+  // Render the lock button
+  renderButton(10, "Lock");
 
   Timer1.attachInterrupt(timerInterrupt);
 }
 
 void renderMenu() {
   char buffer[RECIPE_NAME_MAX];
-  if (menu_animal_idx == MENU_NOT_CHOSEN) {
+  if (locked) {
+    // Render a blank screen
+    for (int i = 0; i < 12; ++i) {
+      renderButton(i, "");
+    }
+  } else if (menu_animal_idx == MENU_NOT_CHOSEN) {
     recipes_get_animal_name(0, buffer);
     renderButton(3, buffer);
     recipes_get_animal_name(1, buffer);
@@ -319,13 +329,6 @@ void updateLCD() {
     tft.print(int(output_duty));
     tft.print(F("%"));
     tft.setCursor(0, DUTY_Y + CHARACTER_PIXEL_HEIGHT);
-    tft.print(F("P: "));
-    tft.print(pid.GetKp());
-    tft.print(F("I: "));
-    tft.print(pid.GetKi());
-    tft.print(F("D: "));
-    tft.print(pid.GetKd());
-    tft.print(F(" "));
     temperature_redraw_needed = false;
   }
   
@@ -368,8 +371,8 @@ void readTemperature() {
 
 void buzzerCheck() {
   // Warn if overheating
-  if (current_temperature > target_temperature + OVERHEATING_THRESHOLD) {
-    //digitalWrite(BUZZER_PIN, HIGH);
+  if ((current_temperature > target_temperature + OVERHEATING_THRESHOLD) && locked) {
+    digitalWrite(BUZZER_PIN, HIGH);
     return;
   }
   digitalWrite(BUZZER_PIN, LOW);
@@ -433,6 +436,10 @@ void menuPress(byte idx) {
     // Restart timer button
     start_time = millis();
     next_stopwatch_redraw = start_time;
+  } else if (idx == 5) {
+    // Lock button
+    locked = true;
+    menu_redraw_needed = true;
   }
 }
 
@@ -443,7 +450,7 @@ void readTouch() {
   // scale from 0->1023 to tft.width
   current_touch.x = map(current_touch.x, TS_MINX, TS_MAXX, tft.width(), 0);
   current_touch.y = map(current_touch.y, TS_MINY, TS_MAXY, tft.height(), 0);
-  if (current_touch.z >= ts.pressureThreshhold) {
+  if (current_touch.z >= ts.pressureThreshhold && !locked) {
     // Work out the button idx
     const int x_col = current_touch.x / BUTTON_WIDTH;
     const int y_row = current_touch.y / BUTTON_HEIGHT;
