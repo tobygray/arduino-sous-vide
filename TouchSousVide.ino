@@ -150,7 +150,7 @@ byte locked;
 PID pid(&current_temperature, &output_duty, &target_temperature, PID_P, PID_I, PID_D, DIRECT, TEMPERATURE_READ_INTERVAL);
 
 // Number of degrees over target before warning state is triggered
-#define OVERHEATING_THRESHOLD 0.5
+#define OVERHEATING_THRESHOLD 2
 
 void renderButton(int idx, const char* text, bool clear = true) {
   // Renders the text for a button to the screen. The buttons are laid out in a grid:
